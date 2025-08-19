@@ -1,0 +1,52 @@
+networks:
+  app-net:
+    driver: bridge
+
+services:
+  rabbitmq-server:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-server
+    hostname: rabbitmq-host
+    ports:
+      - "5672:5672"    # 端口
+      - "15672:15672"  # 管理界面：http://localhost:15672/
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "secret"
+    networks:
+      app-net:
+        aliases:
+          - rabbitmq-host       # <- 确保 a3d 能解析 rabbitmq-host
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  a3d-corrector:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    image: a3d-corrector:v20250815
+    container_name: a3d-corrector
+    environment:
+      RABBIT_HOST: rabbitmq-host
+      RABBIT_PORT: "5672"
+      RABBIT_USERNAME: admin
+      RABBIT_PASSWORD: secret
+      RABBIT_QUEUE: kuaipin
+      RABBIT_EXCHANGE: topic.kuaipin
+      RABBIT_ROUTINGKEY: kuaipin.zn
+      VOLUME_ROOT: /data
+    volumes:
+      - /home/csuzhang/disk/testdata:/data
+      # - /mnt/e:/data 
+    depends_on:
+      rabbitmq-server:
+        condition: service_healthy
+    networks:
+      - app-net
+    tty: true        # 相当于 -t
+    stdin_open: true # 相当于 -i
+    command: ["/bin/bash", "-c", "tail -f /dev/null"]
